@@ -469,7 +469,7 @@ pub fn derive_run_criteria_label(input: TokenStream) -> TokenStream {
 }
 
 pub(crate) fn bevy_ecs_path() -> syn::Path {
-    BevyManifest::default().get_path("bevy_ecs")
+    BevyManifest::default().get_path("bevy_ecs_macro")
 }
 
 #[proc_macro_derive(Component, attributes(component))]
