@@ -9,7 +9,6 @@ use crate::{
     storage::TableId,
     world::{World, WorldId},
 };
-use bevy_tasks::TaskPool;
 use fixedbitset::FixedBitSet;
 use thiserror::Error;
 
@@ -493,94 +492,6 @@ where
         );
     }
 
-    /// Runs `func` on each query result in parallel using the given `task_pool`.
-    ///
-    /// This can only be called for read-only queries, see [`Self::par_for_each_mut`] for
-    /// write-queries.
-    #[inline]
-    pub fn par_for_each<
-        'w,
-        's,
-        FN: Fn(<Q::ReadOnlyFetch as Fetch<'w, 's>>::Item) + Send + Sync + Clone,
-    >(
-        &'s mut self,
-        world: &'w World,
-        task_pool: &TaskPool,
-        batch_size: usize,
-        func: FN,
-    ) {
-        // SAFETY: query is read only
-        unsafe {
-            self.update_archetypes(world);
-            self.par_for_each_unchecked_manual::<Q::ReadOnlyFetch, FN>(
-                world,
-                task_pool,
-                batch_size,
-                func,
-                world.last_change_tick(),
-                world.read_change_tick(),
-            );
-        }
-    }
-
-    /// Runs `func` on each query result in parallel using the given `task_pool`.
-    #[inline]
-    pub fn par_for_each_mut<
-        'w,
-        's,
-        FN: Fn(<Q::Fetch as Fetch<'w, 's>>::Item) + Send + Sync + Clone,
-    >(
-        &'s mut self,
-        world: &'w mut World,
-        task_pool: &TaskPool,
-        batch_size: usize,
-        func: FN,
-    ) {
-        // SAFETY: query has unique world access
-        unsafe {
-            self.update_archetypes(world);
-            self.par_for_each_unchecked_manual::<Q::Fetch, FN>(
-                world,
-                task_pool,
-                batch_size,
-                func,
-                world.last_change_tick(),
-                world.read_change_tick(),
-            );
-        }
-    }
-
-    /// Runs `func` on each query result in parallel using the given `task_pool`.
-    ///
-    /// This can only be called for read-only queries.
-    ///
-    /// # Safety
-    ///
-    /// This does not check for mutable query correctness. To be safe, make sure mutable queries
-    /// have unique access to the components they query.
-    #[inline]
-    pub unsafe fn par_for_each_unchecked<
-        'w,
-        's,
-        FN: Fn(<Q::Fetch as Fetch<'w, 's>>::Item) + Send + Sync + Clone,
-    >(
-        &'s mut self,
-        world: &'w World,
-        task_pool: &TaskPool,
-        batch_size: usize,
-        func: FN,
-    ) {
-        self.update_archetypes(world);
-        self.par_for_each_unchecked_manual::<Q::Fetch, FN>(
-            world,
-            task_pool,
-            batch_size,
-            func,
-            world.last_change_tick(),
-            world.read_change_tick(),
-        );
-    }
-
     /// Runs `func` on each query result for the given [`World`], where the last change and
     /// the current change tick are given. This is faster than the equivalent
     /// iter() method, but cannot be chained like a normal [`Iterator`].
@@ -639,101 +550,6 @@ where
                 }
             }
         }
-    }
-
-    /// Runs `func` on each query result in parallel for the given [`World`], where the last change and
-    /// the current change tick are given. This is faster than the equivalent
-    /// iter() method, but cannot be chained like a normal [`Iterator`].
-    ///
-    /// # Safety
-    ///
-    /// This does not check for mutable query correctness. To be safe, make sure mutable queries
-    /// have unique access to the components they query.
-    /// This does not validate that `world.id()` matches `self.world_id`. Calling this on a `world`
-    /// with a mismatched [`WorldId`] is unsound.
-    pub(crate) unsafe fn par_for_each_unchecked_manual<
-        'w,
-        's,
-        QF: Fetch<'w, 's, State = Q::State>,
-        FN: Fn(QF::Item) + Send + Sync + Clone,
-    >(
-        &'s self,
-        world: &'w World,
-        task_pool: &TaskPool,
-        batch_size: usize,
-        func: FN,
-        last_change_tick: u32,
-        change_tick: u32,
-    ) {
-        // NOTE: If you are changing query iteration code, remember to update the following places, where relevant:
-        // QueryIter, QueryIterationCursor, QueryState::for_each_unchecked_manual, QueryState::par_for_each_unchecked_manual
-        task_pool.scope(|scope| {
-            if QF::IS_DENSE && F::Fetch::IS_DENSE {
-                let tables = &world.storages().tables;
-                for table_id in self.matched_table_ids.iter() {
-                    let table = &tables[*table_id];
-                    let mut offset = 0;
-                    while offset < table.len() {
-                        let func = func.clone();
-                        scope.spawn(async move {
-                            let mut fetch =
-                                QF::init(world, &self.fetch_state, last_change_tick, change_tick);
-                            let mut filter = <F::Fetch as Fetch>::init(
-                                world,
-                                &self.filter_state,
-                                last_change_tick,
-                                change_tick,
-                            );
-                            let tables = &world.storages().tables;
-                            let table = &tables[*table_id];
-                            fetch.set_table(&self.fetch_state, table);
-                            filter.set_table(&self.filter_state, table);
-                            let len = batch_size.min(table.len() - offset);
-                            for table_index in offset..offset + len {
-                                if !filter.table_filter_fetch(table_index) {
-                                    continue;
-                                }
-                                let item = fetch.table_fetch(table_index);
-                                func(item);
-                            }
-                        });
-                        offset += batch_size;
-                    }
-                }
-            } else {
-                let archetypes = &world.archetypes;
-                for archetype_id in self.matched_archetype_ids.iter() {
-                    let mut offset = 0;
-                    let archetype = &archetypes[*archetype_id];
-                    while offset < archetype.len() {
-                        let func = func.clone();
-                        scope.spawn(async move {
-                            let mut fetch =
-                                QF::init(world, &self.fetch_state, last_change_tick, change_tick);
-                            let mut filter = <F::Fetch as Fetch>::init(
-                                world,
-                                &self.filter_state,
-                                last_change_tick,
-                                change_tick,
-                            );
-                            let tables = &world.storages().tables;
-                            let archetype = &world.archetypes[*archetype_id];
-                            fetch.set_archetype(&self.fetch_state, archetype, tables);
-                            filter.set_archetype(&self.filter_state, archetype, tables);
-
-                            let len = batch_size.min(archetype.len() - offset);
-                            for archetype_index in offset..offset + len {
-                                if !filter.archetype_filter_fetch(archetype_index) {
-                                    continue;
-                                }
-                                func(fetch.archetype_fetch(archetype_index));
-                            }
-                        });
-                        offset += batch_size;
-                    }
-                }
-            }
-        });
     }
 }
 

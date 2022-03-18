@@ -4,7 +4,7 @@ use crate::{
     schedule::{
         graph_utils::{self, DependencyGraphError},
         BoxedRunCriteria, BoxedRunCriteriaLabel, BoxedSystemLabel, DuplicateLabelStrategy,
-        ExclusiveSystemContainer, GraphNode, InsertionPoint, ParallelExecutor,
+        ExclusiveSystemContainer, GraphNode, InsertionPoint,
         ParallelSystemContainer, ParallelSystemExecutor, RunCriteriaContainer,
         RunCriteriaDescriptor, RunCriteriaDescriptorOrLabel, RunCriteriaInner, ShouldRun,
         SingleThreadedExecutor, SystemContainer, SystemDescriptor, SystemSet,
@@ -117,10 +117,6 @@ impl SystemStage {
 
     pub fn single_threaded() -> Self {
         Self::new(Box::new(SingleThreadedExecutor::default()))
-    }
-
-    pub fn parallel() -> Self {
-        Self::new(Box::new(ParallelExecutor::default()))
     }
 
     pub fn get_executor<T: ParallelSystemExecutor>(&self) -> Option<&T> {

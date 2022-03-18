@@ -23,8 +23,10 @@
 //! - **Removing a component to an entity:** use
 //!   [`EntityCommands::remove`](crate::system::EntityCommands::remove).
 mod map_entities;
+#[cfg(feature = "serde")]
 mod serde;
 
+#[cfg(feature = "serde")]
 pub use self::serde::*;
 pub use map_entities::*;
 

@@ -7,7 +7,6 @@ use crate::{
     },
     world::{Mut, World},
 };
-use bevy_tasks::TaskPool;
 use std::{any::TypeId, fmt::Debug};
 use thiserror::Error;
 
@@ -496,54 +495,6 @@ where
         unsafe {
             self.state.for_each_unchecked_manual::<Q::Fetch, FN>(
                 self.world,
-                f,
-                self.last_change_tick,
-                self.change_tick,
-            )
-        };
-    }
-
-    /// Runs `f` on each query result in parallel using the given task pool.
-    ///
-    /// This can only be called for immutable data, see [`Self::par_for_each_mut`] for
-    /// mutable access.
-    #[inline]
-    pub fn par_for_each<FN: Fn(<Q::ReadOnlyFetch as Fetch<'w, 's>>::Item) + Send + Sync + Clone>(
-        &'s self,
-        task_pool: &TaskPool,
-        batch_size: usize,
-        f: FN,
-    ) {
-        // SAFE: system runs without conflicts with other systems. same-system queries have runtime
-        // borrow checks when they conflict
-        unsafe {
-            self.state
-                .par_for_each_unchecked_manual::<Q::ReadOnlyFetch, FN>(
-                    self.world,
-                    task_pool,
-                    batch_size,
-                    f,
-                    self.last_change_tick,
-                    self.change_tick,
-                )
-        };
-    }
-
-    /// Runs `f` on each query result in parallel using the given task pool.
-    #[inline]
-    pub fn par_for_each_mut<'a, FN: Fn(<Q::Fetch as Fetch<'a, 'a>>::Item) + Send + Sync + Clone>(
-        &'a mut self,
-        task_pool: &TaskPool,
-        batch_size: usize,
-        f: FN,
-    ) {
-        // SAFE: system runs without conflicts with other systems. same-system queries have runtime
-        // borrow checks when they conflict
-        unsafe {
-            self.state.par_for_each_unchecked_manual::<Q::Fetch, FN>(
-                self.world,
-                task_pool,
-                batch_size,
                 f,
                 self.last_change_tick,
                 self.change_tick,

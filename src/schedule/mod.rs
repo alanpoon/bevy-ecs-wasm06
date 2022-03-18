@@ -4,7 +4,6 @@
 //!  [`Stage`], which then lives within a [`Schedule`].
 
 mod executor;
-mod executor_parallel;
 pub mod graph_utils;
 mod label;
 mod run_criteria;
@@ -15,7 +14,6 @@ mod system_descriptor;
 mod system_set;
 
 pub use executor::*;
-pub use executor_parallel::*;
 pub use graph_utils::GraphNode;
 pub use label::*;
 pub use run_criteria::*;
