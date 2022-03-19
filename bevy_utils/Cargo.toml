@@ -10,5 +10,4 @@ keywords = ["bevy"]
 
 [dependencies]
 bevy_derive = { path="../bevy_derive", version = "0.6.0" }
-uuid = { version = "0.8", features = ["v4", "serde"] }
 bevy_tracing = {path="../bevy_tracing"}
